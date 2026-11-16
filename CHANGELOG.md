@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.4] — 2026-11-16
+
+**Reports, ignore rules, Scoop install, and a faster scanner.**
+
 ### Added
 
 - **CSV report** — `noir scan` now writes `report.csv` alongside the JSON,

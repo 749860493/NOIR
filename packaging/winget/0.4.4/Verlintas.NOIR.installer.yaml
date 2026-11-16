@@ -1,0 +1,16 @@
+PackageIdentifier: Verlintas.NOIR
+PackageVersion: 0.4.4
+InstallerLocale: en-US
+MinimumOSVersion: 10.0.0.0
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+  - RelativeFilePath: NOIR\NOIR.exe
+    PortableCommandAlias: noir
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/Verlintas/NOIR/releases/download/v0.4.4/noir-v0.4.4-Windows-portable.zip
+    InstallerSha256: 4FA953ECFE11443EBFD13A57E3EAB33073299E72F7087771B094204B5E9D1B5C
+    Scope: user
+ManifestType: installer
+ManifestVersion: 1.6.0

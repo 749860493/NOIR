@@ -30,7 +30,8 @@ object Report {
         sb.append("    \"limit\": ").append(meta.limit?.toString() ?: "null").append("\n")
         sb.append("  },\n")
         sb.append("  \"device\": {\"serial\": \"").append(esc(device.serial))
-            .append("\", \"model\": \"").append(esc(device.model)).append("\"},\n")
+            .append("\", \"model\": \"").append(esc(device.model))
+            .append("\", \"product\": \"").append(esc(device.product)).append("\"},\n")
         sb.append("  \"apps\": [\n")
         apps.forEachIndexed { i, a ->
             sb.append("    {\n")

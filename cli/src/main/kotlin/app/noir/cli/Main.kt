@@ -34,6 +34,7 @@ import app.noir.core.platform.ContainerRuntime
 import app.noir.core.platform.Docker
 import app.noir.core.platform.Platform
 import app.noir.core.platform.Setup
+import com.google.gson.GsonBuilder
 import java.io.File
 import java.time.OffsetDateTime
 import java.util.concurrent.Executors
@@ -49,7 +50,7 @@ private val BOOLEAN_FLAGS = setOf(
 )
 
 private val VALUE_FLAGS = setOf(
-    "serial", "out", "min", "limit", "only", "ignore", "adb", "jadx", "top", "jobs", "lang"
+    "serial", "out", "min", "limit", "only", "ignore", "format", "adb", "jadx", "top", "jobs", "lang"
 )
 
 private val ALL_OPTIONS = BOOLEAN_FLAGS + VALUE_FLAGS
@@ -170,6 +171,7 @@ private fun runMain(args: Array<String>) {
     when (command) {
         "devices" -> cmdDevices(commandArgs)
         "scan" -> cmdScan(commandArgs)
+        "report" -> cmdReport(commandArgs)
         "diff" -> cmdDiff(commandArgs)
         "auto" -> cmdAuto(commandArgs)
         "ui" -> cmdUi(commandArgs)
@@ -214,8 +216,9 @@ private fun usage() {
           noir --version                      print the version
           noir doctor                         check adb / jadx / docker / device
           noir setup                          download missing tools into ~/.noir/tools
-          noir devices                        list connected devices
+          noir devices [--json]               list connected devices
           noir scan [options]                 inventory apps, permissions and endpoints
+          noir report <dir|report.json>       re-render MD / HTML / CSV from a report
           noir diff <old> <new> [options]     compare two report.json files
           noir auto [options]                 scan + classify + plan
           noir ui [options]                   same, rendered as a dashboard
@@ -230,6 +233,7 @@ private fun usage() {
           --limit <n>        cap reported apps (default 500)
           --only <regex>     restrict scanning to matching package names
           --ignore <file>    ignore packages/hosts listed in a file
+          --format <list>    report formats: md,html,csv (default: all)
           --adb <path>       override adb binary
           --jadx <path>      override jadx binary
 
@@ -370,7 +374,19 @@ private fun cmdDevices(raw: List<String>) {
     val filter = args.value("serial")
     val devices = adb.devices().let { all -> if (filter == null) all else all.filter { it.serial == filter } }
     if (devices.isEmpty()) {
-        println(noDeviceGuide())
+        if (args.flag("json")) println("[]") else println(noDeviceGuide())
+        return
+    }
+    if (args.flag("json")) {
+        val rows = devices.map {
+            mapOf(
+                "serial" to it.serial,
+                "state" to it.state,
+                "model" to it.model,
+                "product" to it.product
+            )
+        }
+        println(GsonBuilder().setPrettyPrinting().create().toJson(rows))
         return
     }
     devices.firstOrNull { it.state == "device" }?.let { applyDeviceLanguage(adb, it) }
@@ -413,6 +429,84 @@ private fun cmdScan(raw: List<String>) {
     }
     println()
     println(Tui.clip("[+] ${result.outDir.absolutePath}", ascii = ASCII))
+}
+
+private fun cmdReport(raw: List<String>) {
+    val args = Args(raw)
+    if (args.positional.size != 1) {
+        throw NoirException(
+            t("用法：noir report <目录|report.json>", "usage: noir report <dir|report.json>"),
+            t(
+                "从已有 report.json 重新生成 Markdown、HTML 和 CSV，不需要连接手机。",
+                "Regenerate Markdown, HTML, and CSV from an existing report.json without a device."
+            )
+        )
+    }
+
+    val input = File(args.positional[0])
+    val reportFile = if (input.isDirectory) File(input, "report.json") else input
+    if (!reportFile.isFile) {
+        throw NoirException(
+            t("找不到报告：${reportFile.path}", "report not found: ${reportFile.path}"),
+            t("传入 noir scan 生成的 report.json 或其输出目录。", "Pass a report.json or the scan output directory.")
+        )
+    }
+
+    val requested = (args.value("format") ?: "md,html,csv")
+        .split(',')
+        .map { it.trim().lowercase() }
+        .filter { it.isNotEmpty() }
+    val formats = requested.map {
+        when (it) {
+            "md", "markdown" -> "md"
+            "html" -> "html"
+            "csv" -> "csv"
+            else -> throw NoirException(
+                t("不支持的格式：$it", "unsupported format: $it"),
+                t("可选格式：md, html, csv。", "Available formats: md, html, csv.")
+            )
+        }
+    }.toSet()
+    if (formats.isEmpty()) {
+        throw NoirException(
+            t("至少选择一种格式。", "choose at least one format."),
+            t("例如 --format md,html。", "For example --format md,html.")
+        )
+    }
+
+    val data = try {
+        readFullReport(reportFile.path)
+    } catch (e: Exception) {
+        throw NoirException(
+            t("报告读取失败：${e.message}", "could not read report: ${e.message}"),
+            t(
+                "确认它是 noir scan 生成的 report.json。",
+                "Make sure it is a report.json generated by noir scan."
+            )
+        )
+    }
+
+    val outDir = File(args.value("out") ?: reportFile.parentFile?.path ?: ".").apply { mkdirs() }
+    val written = ArrayList<File>()
+    if ("md" in formats) {
+        File(outDir, "report.md").also {
+            it.writeText(Report.markdown(data.device, data.apps, data.recommendations, data.meta, LANG))
+            written += it
+        }
+    }
+    if ("html" in formats) {
+        File(outDir, "report.html").also {
+            it.writeText(Report.html(data.device, data.apps, data.recommendations, data.meta, LANG))
+            written += it
+        }
+    }
+    if ("csv" in formats) {
+        File(outDir, "report.csv").also {
+            it.writeText(Report.csv(data.device, data.apps, data.meta, LANG))
+            written += it
+        }
+    }
+    written.forEach { println("[+] ${it.path}") }
 }
 
 private fun cmdDiff(raw: List<String>) {

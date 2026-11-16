@@ -14,6 +14,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **ignore rules** — `--ignore <file>` accepts package names and upload hosts,
   removes matching endpoints before scoring/reporting, and writes the applied
   rules to `ignore.txt` for reproducibility.
+- **report re-rendering** — `noir report <dir|report.json>` regenerates
+  Markdown, HTML, and CSV from an existing report without a device.
+- **JSON device list** — `noir devices --json` emits a machine-readable array
+  for scripts and CI.
 
 ### Changed
 

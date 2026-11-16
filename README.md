@@ -291,8 +291,9 @@ cli/build/install/noir/bin/noir.bat    # Windows
 ```bash
 noir --about              # 它是什么、会写什么、许可
 noir --version
-noir devices
-noir scan                 # 全量扫描，输出 JSON / Markdown / 域名清单
+noir devices              # 列出设备；加 --json 输出机器可读结果
+noir scan                 # 全量扫描，输出 JSON / Markdown / HTML / CSV / 域名清单
+noir report noir-out      # 从已有 report.json 重新生成 MD / HTML / CSV
 noir diff old/report.json new/report.json   # 对比两次扫描
 noir ui                   # 扫描并渲染仪表盘
 noir auto                 # 扫描 + 分类 + 生成处置计划（dry-run）
@@ -314,6 +315,7 @@ noir block com.example.app --apply
 | `--limit <n>` | 最多输出 N 条 |
 | `--only <regex>` | 只扫描匹配的包名，例如 `--only 'com\.miui\.'` |
 | `--ignore <file>` | 忽略文件中的包名和上报域名 |
+| `--format <md,html,csv>` | `report` 命令的输出格式 |
 | `--adb <path>` / `--jadx <path>` | 手动指定工具路径 |
 | `--yes` | 自动化场景下跳过确认 |
 
@@ -338,6 +340,18 @@ noir scan --ignore noir.ignore
 被忽略的包不会扫描；命中的上报端点会在评分和报告生成前移除。
 输出目录会保存一份规范化后的 `ignore.txt`，方便复现这次报告使用的过滤规则。
 `auto`、`ui`、`deepscan` 同样支持 `--ignore`。
+
+### 重新生成报告
+
+`noir report` 直接读取已有的 `report.json`，不需要手机或重新扫描：
+
+```bash
+noir report noir-out
+noir report noir-out --format md,html,csv
+noir report old/report.json --out shared-report --format html
+```
+
+默认重写输入目录里的 `report.md` / `report.html` / `report.csv`。适合升级 NOIR 后重新渲染，或把 JSON 分享给别人后再生成 HTML。
 
 ## 对比两次扫描
 

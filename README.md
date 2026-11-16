@@ -313,8 +313,31 @@ noir block com.example.app --apply
 | `--min <score>` | 只保留分数 ≥ N 的应用 |
 | `--limit <n>` | 最多输出 N 条 |
 | `--only <regex>` | 只扫描匹配的包名，例如 `--only 'com\.miui\.'` |
+| `--ignore <file>` | 忽略文件中的包名和上报域名 |
 | `--adb <path>` / `--jadx <path>` | 手动指定工具路径 |
 | `--yes` | 自动化场景下跳过确认 |
+
+### 忽略已知项
+
+对已经确认安全和已知上报域名，可以写一个忽略文件，减少重复噪音：
+
+```text
+# noir.ignore
+# 包名也可以不加 package 前缀
+com.example.known
+package com.example.old
+
+# 匹配该域名及其子域
+host example.com
+```
+
+```bash
+noir scan --ignore noir.ignore
+```
+
+被忽略的包不会扫描；命中的上报端点会在评分和报告生成前移除。
+输出目录会保存一份规范化后的 `ignore.txt`，方便复现这次报告使用的过滤规则。
+`auto`、`ui`、`deepscan` 同样支持 `--ignore`。
 
 ## 对比两次扫描
 
@@ -361,6 +384,7 @@ noir-out/
 ├── report.md                 # 人类可读报告
 ├── report.html               # 离线单文件报告，可直接用浏览器打开
 ├── report.csv                # 表格导出（每行一个应用，适合 Excel）
+├── ignore.txt                # 本次使用的忽略规则（使用 --ignore 时生成）
 ├── domains-trackers.txt      # 统计/广告/崩溃上报，可整份导入
 ├── domains-other.txt         # 用途不明，导入前逐条判断
 ├── domains-functional.txt    # 推送/登录/更新/支付/商店/云同步，禁止拦截

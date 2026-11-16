@@ -11,6 +11,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Markdown, and HTML reports, one row per flagged app with the same evidence.
 - **Scoop** — Windows users can install and update NOIR from the Verlintas
   Scoop bucket; WinGet manifests are prepared for submission.
+- **ignore rules** — `--ignore <file>` accepts package names and upload hosts,
+  removes matching endpoints before scoring/reporting, and writes the applied
+  rules to `ignore.txt` for reproducibility.
 
 ### Changed
 

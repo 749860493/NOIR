@@ -13,6 +13,7 @@ import app.noir.core.Category
 import app.noir.core.Classifier
 import app.noir.core.Domains
 import app.noir.core.Device
+import app.noir.core.IgnoreRules
 import app.noir.core.Lang
 import app.noir.core.Recommendation
 import app.noir.core.Report
@@ -48,7 +49,7 @@ private val BOOLEAN_FLAGS = setOf(
 )
 
 private val VALUE_FLAGS = setOf(
-    "serial", "out", "min", "limit", "only", "adb", "jadx", "top", "jobs", "lang"
+    "serial", "out", "min", "limit", "only", "ignore", "adb", "jadx", "top", "jobs", "lang"
 )
 
 private val ALL_OPTIONS = BOOLEAN_FLAGS + VALUE_FLAGS
@@ -228,6 +229,7 @@ private fun usage() {
           --min <score>      only keep apps at or above this score
           --limit <n>        cap reported apps (default 500)
           --only <regex>     restrict scanning to matching package names
+          --ignore <file>    ignore packages/hosts listed in a file
           --adb <path>       override adb binary
           --jadx <path>      override jadx binary
 
@@ -390,7 +392,8 @@ internal data class ScanResult(
     val installed: Int,
     val paths: Map<String, String>,
     val meta: ReportMeta,
-    val adb: Adb
+    val adb: Adb,
+    val ignore: IgnoreRules = IgnoreRules.EMPTY
 )
 
 private fun cmdScan(raw: List<String>) {
@@ -783,6 +786,20 @@ private fun confirm(prompt: String): Boolean {
 
 // ── scan pipeline ──────────────────────────────────────────────────────────
 
+private fun loadIgnore(path: String): IgnoreRules {
+    val file = File(path)
+    if (!file.isFile) {
+        throw NoirException(
+            t("找不到忽略文件：$path", "ignore file not found: $path"),
+            t(
+                "每行写一个包名，或用 `host example.com` 忽略上报域名。",
+                "Use one package name per line, or `host example.com` to ignore an upload host."
+            )
+        )
+    }
+    return IgnoreRules.parse(file.readLines().asSequence())
+}
+
 private fun performScan(args: Args, limitOverride: Int? = null): ScanResult {
     val adb = connectAdb(args)
     val device = awaitDevice(adb, args.value("serial"), interactive = isInteractive())
@@ -790,6 +807,7 @@ private fun performScan(args: Args, limitOverride: Int? = null): ScanResult {
     val outDir = File(args.value("out") ?: "noir-out").apply { mkdirs() }
     val minScore = intOption(args, "min", 0, 0)
     val limit = limitOverride ?: intOption(args, "limit", 500, 0)
+    val ignore = args.value("ignore")?.let(::loadIgnore) ?: IgnoreRules.EMPTY
 
     say("[*] host: ${Platform.describe()}")
     say("[*] device: ${device.serial} (${device.model})")
@@ -828,9 +846,13 @@ private fun performScan(args: Args, limitOverride: Int? = null): ScanResult {
         m.perms.contains("INTERNET") &&
             m.perms.count { it in Rules.SENSITIVE } > 0 &&
             paths.containsKey(pkg) &&
+            !ignore.ignoresPackage(pkg) &&
             (only == null || only.containsMatchIn(pkg))
     }
     say("[*] candidates (internet + sensitive): ${candidates.size}")
+    if (!ignore.isEmpty) {
+        say("[*] ignore rules: ${ignore.packages.size} package(s), ${ignore.hosts.size} host(s)")
+    }
 
     val android = adb.shell(device.serial, "getprop ro.build.version.release").output.trim()
     val reportMeta = readReportMeta(adb, device, android).copy(minScore = minScore, limit = limit)
@@ -875,7 +897,7 @@ private fun performScan(args: Args, limitOverride: Int? = null): ScanResult {
 
     val apps = candidates.map { (pkg, m) ->
         val perms = m.perms.filter { it in Rules.SENSITIVE }
-        val urls = endpoints[pkg].orEmpty()
+        val urls = ignore.filterEndpoints(endpoints[pkg].orEmpty())
         AppEntry(
             pkg = pkg,
             uid = m.appId,
@@ -894,7 +916,7 @@ private fun performScan(args: Args, limitOverride: Int? = null): ScanResult {
         .sortedByDescending { it.score }
         .take(limit)
 
-    return ScanResult(device, apps, outDir, android, paths.size, paths, reportMeta, adb)
+    return ScanResult(device, apps, outDir, android, paths.size, paths, reportMeta, adb, ignore)
 }
 
 private fun readReportMeta(adb: Adb, device: Device, android: String): ReportMeta {
@@ -932,6 +954,9 @@ private fun writeReports(result: ScanResult, recommendations: List<Recommendatio
     File(result.outDir, "report.csv").writeText(
         Report.csv(result.device, result.apps, result.meta, LANG)
     )
+    if (!result.ignore.isEmpty) {
+        File(result.outDir, "ignore.txt").writeText(result.ignore.render())
+    }
     writeDomainFiles(result.outDir, result.apps)
     val effective = effectiveActions(result.adb, result, recommendations)
     File(result.outDir, "plan.txt").writeText(
